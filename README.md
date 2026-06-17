@@ -1,6 +1,6 @@
 # codex-acct
 
-Switch between multiple OpenAI **Codex** (ChatGPT) accounts from the terminal — like `nvm` for Node versions, but for Codex logins.
+Switch between multiple OpenAI **Codex** (ChatGPT) accounts from the terminal or a macOS menu bar app — like `nvm` for Node versions, but for Codex logins.
 
 Codex stores a single login in `~/.codex/auth.json`. When one account runs out of usage, `codex-acct` swaps in another saved account in one command, and lets you switch back later. It touches **only** `auth.json` — your sessions, memories, skills, config and history stay shared.
 
@@ -14,34 +14,30 @@ $ codex-acct use personal
 saved current account as 'work' before switching
 switched to personal (me@gmail.com, plus)
 Restart Codex (or the IDE extension) for the switch to take effect.
+
+$ codex-acct limits
+   ALIAS       EMAIL             PLAN  5H                          WEEKLY
+*  work        you@example.com   pro   50% left, resets in 3h 33m  83% left, resets in 6d 17h
 ```
 
 ## Install
 
-Requires **Node.js >= 20.19**. No runtime dependencies.
+Requires **Node.js >= 20.19**. The CLI uses Node's built-in runtime; the macOS menu bar app uses Electron from `optionalDependencies`.
 
-Run without installing:
-
-```bash
-npx @npmsh-corp/codex-acct      # interactive picker
-npx @npmsh-corp/codex-acct ls
-```
-
-Or install globally:
+From this fork:
 
 ```bash
-npm install -g @npmsh-corp/codex-acct
-codex-acct ls
-# short alias:
-cxa ls
-```
-
-From source:
-
-```bash
-git clone https://github.com/NikMishon/codex-acct.git
+git clone https://github.com/vlntnbb/codex-acct.git
 cd codex-acct
+npm install
 npm link            # exposes `codex-acct` / `cxa`
+codex-acct ls
+```
+
+Launch the menu bar app from the checkout:
+
+```bash
+npm run menubar
 ```
 
 ## Usage
@@ -76,7 +72,16 @@ codex-acct menubar
 
 The menu bar app lists every saved account with visual remaining-limit bars. It shows the 5-hour and weekly Codex usage windows reported by the backend.
 
-Adding an account from the menu bar app saves the new login, then restores the account that was active before the add flow. Switching from the menu bar app terminates running `codex`/`Codex` processes before swapping `auth.json`, then refreshes the displayed limits.
+The tray icon has no text label. Its color reflects the active account's weekly remaining limit:
+
+- green: 50% or more remaining
+- yellow: 25% or more remaining
+- red: below 25% remaining
+- red blinking once every five minutes: below 10% remaining
+
+Adding an account from the menu bar app opens a Terminal login flow, saves the new login, then restores the account that was active before the add flow. It does **not** silently switch the menu bar app to the newly added account.
+
+Switching from the menu bar app terminates running `codex`/`Codex` processes before swapping `auth.json`, then refreshes the displayed limits. Informational rows in the menu stay readable instead of using macOS's low-contrast disabled text.
 
 ### First run
 
@@ -94,12 +99,15 @@ If `alias` is omitted it is derived from the account email.
 
 - Each account is a snapshot of `auth.json` stored in `~/.codex/accounts/<alias>.auth.json`, indexed by `index.json`.
 - `use` first **re-snapshots the current account** (Codex rewrites `auth.json` with fresh tokens as you work, so this captures the latest), then atomically replaces `auth.json` with the chosen snapshot. If the current login is not saved yet, it is preserved automatically under an email-derived alias so it is never lost.
+- `limits` and the menu bar app read Codex usage from ChatGPT's backend using the saved OAuth tokens. They show the 5-hour and weekly windows, including reset minutes when the backend provides reset timestamps.
 - Accounts are matched by the stable `chatgpt_account_id` from the id-token JWT, not by email or alias — so two snapshots of the same account are recognized as the same account.
 - Writes are atomic (temp file → `fsync` → rename, with retries for transient Windows file locks). Snapshots are written `0600` on Unix.
 
 ### Restart Codex after switching
 
 Codex (CLI, IDE extension and desktop app) reads `auth.json` at startup and may rewrite it on its next token refresh. **Switch while Codex is not running, then start it** — otherwise a running instance can clobber the swap.
+
+The menu bar app handles this by terminating running `codex`/`Codex` processes before switching. From the CLI, use `codex-acct use --kill-codex <alias>` for the same behavior.
 
 ### `ID-TOKEN` column
 
@@ -120,7 +128,7 @@ The `ID-TOKEN` column shows the id-token expiry, which is short-lived (hours). A
 
 - Tokens are never printed or logged.
 - Snapshots live under your user-owned Codex home (`0600` on Unix); do not commit them or share them.
-- This tool runs fully locally and makes no network calls of its own.
+- Account switching is local. Limit checks call ChatGPT's backend and the OpenAI OAuth refresh endpoint when tokens need refreshing; no third-party service receives your tokens.
 
 ## License
 
