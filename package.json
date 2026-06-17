@@ -21,7 +21,11 @@
   },
   "scripts": {
     "test": "node --test",
-    "start": "node bin/codex-acct.js"
+    "start": "node bin/codex-acct.js",
+    "menubar": "electron src/menubar.js"
+  },
+  "optionalDependencies": {
+    "electron": "^42.4.1"
   },
   "keywords": [
     "codex",

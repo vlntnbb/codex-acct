@@ -2,6 +2,7 @@ import { authFilePath, snapshotFilePath } from './config.js';
 import { copyFileAtomic, fileExists, readJsonFile } from './fsx.js';
 import { identityFromAuth } from './jwt.js';
 import { UserError } from './errors.js';
+import { terminateCodexProcesses } from './codex.js';
 import {
   deleteSnapshot,
   loadIndex,
@@ -117,16 +118,17 @@ export function preserveActiveAccount() {
   return { alias, created: true, identity: registered };
 }
 
-export function switchTo(alias) {
+export function switchTo(alias, { killCodex = false } = {}) {
   const index = loadIndex();
   if (!index.accounts[alias]) throw new UserError(`unknown account '${alias}'`);
   if (!snapshotExists(alias)) {
     throw new UserError(`snapshot for '${alias}' is missing; re-add it with \`codex-acct add\``);
   }
+  const terminated = killCodex ? terminateCodexProcesses() : null;
   const preserved = preserveActiveAccount();
   copyFileAtomic(snapshotFilePath(alias), authFilePath(), { mode: 0o600 });
   const identity = identityFromAuth(readSnapshot(alias));
-  return { identity, preserved };
+  return { identity, preserved, terminated };
 }
 
 export function removeAccount(alias, { force = false } = {}) {

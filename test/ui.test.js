@@ -14,6 +14,12 @@ test('humanizeExp formats future spans', () => {
   assert.equal(humanizeExp(NOW / 1000 + 3 * 86400, NOW), 'in 3d');
 });
 
+test('humanizeExp can include reset minutes', () => {
+  assert.equal(humanizeExp(NOW / 1000 + 5 * 3600 + 24 * 60, NOW, { maxUnits: 2 }), 'in 5h 24m');
+  assert.equal(humanizeExp(NOW / 1000 + 8 * 3600 + 31 * 60, NOW, { maxUnits: 2 }), 'in 8h 31m');
+  assert.equal(humanizeExp(NOW / 1000 + 3 * 86400 + 2 * 3600, NOW, { maxUnits: 2 }), 'in 3d 2h');
+});
+
 test('humanizeExp formats past spans', () => {
   assert.equal(humanizeExp(NOW / 1000 - 4 * 3600, NOW), '4h ago');
   assert.equal(humanizeExp(NOW / 1000 - 2 * 86400, NOW), '2d ago');

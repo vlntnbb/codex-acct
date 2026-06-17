@@ -50,14 +50,33 @@ npm link            # exposes `codex-acct` / `cxa`
 | --- | --- |
 | `codex-acct` | Open the interactive picker (↑/↓, enter, esc). |
 | `codex-acct use <alias\|email\|#>` | Switch the active account. |
+| `codex-acct use --kill-codex <alias\|email\|#>` | Terminate Codex, then switch the active account. |
 | `codex-acct ls` | List saved accounts (`--json` for scripts). |
+| `codex-acct limits` | Show 5h/weekly Codex usage windows for saved ChatGPT accounts (`--json` for scripts). |
 | `codex-acct who` | Show the active account (`--json`). |
 | `codex-acct add [alias]` | Run `codex login` for a new account, then save it. |
+| `codex-acct add --keep-current [alias]` | Save a new account, then restore the previously active account. |
 | `codex-acct add --from-current [alias]` | Save the account you are already logged in as. |
 | `codex-acct add --import <file> [alias]` | Save an account from an exported `auth.json`. |
 | `codex-acct rename <old> <new>` | Rename a saved account. |
 | `codex-acct remove <alias>` | Delete a saved account (`--force` to remove the active one). |
 | `codex-acct default [alias]` | Show or set the default account. |
+| `codex-acct menubar` | Launch the macOS menu bar app from a source checkout with dependencies installed. |
+
+## macOS menu bar app
+
+From a source checkout:
+
+```bash
+npm install
+npm run menubar
+# or:
+codex-acct menubar
+```
+
+The menu bar app lists every saved account with visual remaining-limit bars. It shows the 5-hour and weekly Codex usage windows reported by the backend.
+
+Adding an account from the menu bar app saves the new login, then restores the account that was active before the add flow. Switching from the menu bar app terminates running `codex`/`Codex` processes before swapping `auth.json`, then refreshes the displayed limits.
 
 ### First run
 
@@ -92,6 +111,7 @@ The `ID-TOKEN` column shows the id-token expiry, which is short-lived (hours). A
 | --- | --- |
 | `CODEX_HOME` | Target a non-default Codex home (default `~/.codex`). |
 | `CODEX_BIN` | Path to the `codex` binary if it is not on `PATH` (used by `add`). |
+| `CODEX_CHATGPT_BASE_URL` | Override the ChatGPT backend base URL used by `limits` and the menu bar app. |
 | `NO_COLOR` | Disable colored output. |
 
 ## Security

@@ -1,6 +1,9 @@
 import { parseArgs } from 'node:util';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 
 import { UserError } from './errors.js';
 import { fileExists, readJsonFile } from './fsx.js';
@@ -9,6 +12,7 @@ import { loadIndex, saveIndex } from './store.js';
 import { isCodexRunning, runCodexLogin } from './codex.js';
 import { paint, printTable, humanizeExp } from './ui.js';
 import { pickFromList } from './pick.js';
+import { fetchAllAccountLimitStatuses } from './limits.js';
 import {
   activeIdentity,
   aliasFromEmail,
@@ -32,6 +36,9 @@ const OPTIONS = {
   force: { type: 'boolean', short: 'f' },
   'from-current': { type: 'boolean' },
   import: { type: 'string' },
+  refresh: { type: 'boolean' },
+  'kill-codex': { type: 'boolean' },
+  'keep-current': { type: 'boolean' },
 };
 
 function printHelp() {
@@ -40,9 +47,14 @@ function printHelp() {
 Usage
   codex-acct                          open the interactive account picker
   codex-acct use <alias|email|#>      switch the active account
+  codex-acct use --kill-codex <alias> kill Codex, then switch the active account
   codex-acct ls                       list saved accounts
+  codex-acct limits                   show Codex 5h/weekly limit status
   codex-acct who                      show the active account
+  codex-acct menubar                  launch the macOS menu bar app
   codex-acct add [alias]              log in to a new account and save it
+  codex-acct add --keep-current [alias]
+                                      save a new account, then restore the previous active account
   codex-acct add --from-current [alias]
                                       save the account you are already logged in as
   codex-acct add --import <file> [alias]
@@ -53,6 +65,9 @@ Usage
 
 Options
   --json          machine-readable output (ls, who)
+  --refresh       refresh OAuth tokens before reading limits
+  --kill-codex    terminate Codex before switching
+  --keep-current  after add, restore the account that was active before login
   --force, -f      override safety refusals (remove the active account)
   --help, -h       show this help
   --version        print version
@@ -106,6 +121,13 @@ function warnRestart() {
   }
 }
 
+function announceTerminated(terminated) {
+  const killed = (terminated || []).reduce((sum, item) => sum + (Number(item.killed) || 0), 0);
+  if (killed > 0) {
+    console.log(paint('gray', `terminated ${killed} Codex process${killed === 1 ? '' : 'es'} before switching`));
+  }
+}
+
 function reportAdded(alias, identity, duplicateOf) {
   console.log(`${paint('green', 'saved')} ${paint('bold', alias)} (${describe(identity)})`);
   if (duplicateOf) {
@@ -147,11 +169,12 @@ async function cmdPick() {
   return 0;
 }
 
-async function cmdUse(args) {
+async function cmdUse(args, values) {
   const target = args[0];
   if (!target) return cmdPick();
   const alias = resolveTarget(target);
-  const { identity, preserved } = switchTo(alias);
+  const { identity, preserved, terminated } = switchTo(alias, { killCodex: Boolean(values['kill-codex']) });
+  announceTerminated(terminated);
   announcePreserved(preserved);
   console.log(`${paint('green', 'switched to')} ${paint('bold', alias)} (${describe(identity)})`);
   warnRestart();
@@ -188,6 +211,67 @@ function cmdWho(values) {
   const label = match ? paint('bold', match.alias) : paint('gray', '(unsaved)');
   console.log(`${label}  ${active.email ?? 'api-key'}  ${active.plan}  (id-token ${humanizeExp(active.idTokenExp)})`);
   return 0;
+}
+
+function formatWindow(window) {
+  if (!window || typeof window.remainingPercent !== 'number') return '—';
+  const reset = window.resetsAt ? `, resets ${humanizeExp(window.resetsAt, Date.now(), { maxUnits: 2 })}` : '';
+  return `${Math.round(window.remainingPercent)}% left${reset}`;
+}
+
+function printLimitsTable(rows) {
+  const columns = [
+    { title: '', get: (row) => (row.isActive ? '*' : '') },
+    { title: 'ALIAS', get: (row) => row.alias },
+    { title: 'EMAIL', get: (row) => row.email ?? '—' },
+    { title: 'PLAN', get: (row) => row.plan ?? '—' },
+    { title: '5H', get: (row) => (row.error ? `error: ${row.error}` : formatWindow(row.windows.fiveHour)) },
+    { title: 'WEEKLY', get: (row) => (row.error ? '—' : formatWindow(row.windows.weekly)) },
+  ];
+  const widths = columns.map((column) =>
+    Math.max(column.title.length, ...rows.map((row) => String(column.get(row)).length)),
+  );
+  console.log(paint('dim', columns.map((column, i) => String(column.title).padEnd(widths[i])).join('  ')));
+  for (const row of rows) {
+    const line = columns.map((column, i) => String(column.get(row)).padEnd(widths[i])).join('  ');
+    console.log(row.isActive ? paint('green', line) : line);
+  }
+}
+
+async function cmdLimits(values) {
+  const rows = await fetchAllAccountLimitStatuses({ forceRefresh: Boolean(values.refresh) });
+  if (values.json) {
+    console.log(JSON.stringify(rows, null, 2));
+    return 0;
+  }
+  if (rows.length === 0) {
+    console.log('no saved accounts yet. Save the current login with: codex-acct add --from-current');
+    return 0;
+  }
+  printLimitsTable(rows);
+  return rows.some((row) => row.error) ? 1 : 0;
+}
+
+async function cmdMenubar() {
+  if (process.platform !== 'darwin') {
+    throw new UserError('the menu bar app is only supported on macOS');
+  }
+  const require = createRequire(import.meta.url);
+  let electronBin;
+  try {
+    electronBin = require('electron');
+  } catch {
+    throw new UserError('Electron is not installed. Run `npm install` from the project, then `codex-acct menubar`.');
+  }
+  const appPath = fileURLToPath(new URL('./menubar.js', import.meta.url));
+  const child = spawn(electronBin, [appPath], { stdio: 'inherit', env: process.env });
+  return new Promise((resolve) => {
+    child.on('exit', (code) => resolve(code ?? 0));
+    child.on('error', (err) => {
+      process.stderr.write(paint('red', `error: failed to launch Electron: ${err.message}\n`));
+      resolve(1);
+    });
+  });
 }
 
 async function cmdAdd(args, values) {
@@ -233,6 +317,15 @@ async function cmdAdd(args, values) {
   validateAlias(alias);
   const { identity, duplicateOf } = registerAccount(alias, { authData: auth });
   reportAdded(alias, identity, duplicateOf);
+  if (values['keep-current'] && preserved?.alias) {
+    const { identity: restoredIdentity } = switchTo(preserved.alias);
+    console.log(
+      paint(
+        'gray',
+        `restored active account to '${preserved.alias}' (${describe(restoredIdentity)})`,
+      ),
+    );
+  }
   return 0;
 }
 
@@ -293,13 +386,19 @@ export async function main(argv) {
         return await cmdPick();
       case 'use':
       case 'switch':
-        return await cmdUse(positionals.slice(1));
+        return await cmdUse(positionals.slice(1), values);
       case 'ls':
       case 'list':
         return cmdList(values);
+      case 'limits':
+      case 'usage':
+        return await cmdLimits(values);
       case 'who':
       case 'current':
         return cmdWho(values);
+      case 'menubar':
+      case 'menu-bar':
+        return await cmdMenubar();
       case 'add':
         return await cmdAdd(positionals.slice(1), values);
       case 'remove':

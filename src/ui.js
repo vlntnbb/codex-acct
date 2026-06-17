@@ -11,12 +11,40 @@ export function paint(style, text) {
   }
 }
 
-export function humanizeExp(epochSeconds, nowMs = Date.now()) {
+const UNIT_MS = [
+  { label: 'd', ms: 24 * 60 * 60 * 1000 },
+  { label: 'h', ms: 60 * 60 * 1000 },
+  { label: 'm', ms: 60 * 1000 },
+  { label: 's', ms: 1000 },
+];
+
+function detailedSpan(absMs, { maxUnits = 2, smallestUnit = 'm' } = {}) {
+  const smallestIndex = UNIT_MS.findIndex((unit) => unit.label === smallestUnit);
+  const units = UNIT_MS.slice(0, smallestIndex === -1 ? UNIT_MS.length : smallestIndex + 1);
+  const minMs = units[units.length - 1].ms;
+  let remaining = Math.max(minMs, Math.round(absMs / minMs) * minMs);
+  const parts = [];
+
+  for (const unit of units) {
+    const value = Math.floor(remaining / unit.ms);
+    if (value > 0) {
+      parts.push(`${value}${unit.label}`);
+      remaining -= value * unit.ms;
+    }
+    if (parts.length >= maxUnits) break;
+  }
+
+  return parts.length > 0 ? parts.join(' ') : `1${units[units.length - 1].label}`;
+}
+
+export function humanizeExp(epochSeconds, nowMs = Date.now(), options = {}) {
   if (typeof epochSeconds !== 'number' || Number.isNaN(epochSeconds)) return '—';
   const deltaMs = epochSeconds * 1000 - nowMs;
   const abs = Math.abs(deltaMs);
   let span;
-  if (abs < 60 * 1000) span = `${Math.max(1, Math.round(abs / 1000))}s`;
+  if (options.maxUnits > 1 || options.smallestUnit) {
+    span = detailedSpan(abs, options);
+  } else if (abs < 60 * 1000) span = `${Math.max(1, Math.round(abs / 1000))}s`;
   else if (abs < 60 * 60 * 1000) span = `${Math.round(abs / 60000)}m`;
   else if (abs < 24 * 60 * 60 * 1000) span = `${Math.round(abs / 3600000)}h`;
   else span = `${Math.round(abs / 86400000)}d`;

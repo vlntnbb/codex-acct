@@ -4,9 +4,17 @@ export function codexBinary() {
   return process.env.CODEX_BIN || 'codex';
 }
 
+function loginArgs(extraArgs) {
+  const hasServiceTierOverride = extraArgs.some((arg, index) => {
+    if (arg === '-c' || arg === '--config') return extraArgs[index + 1]?.startsWith('service_tier=');
+    return arg.startsWith('service_tier=') || arg.startsWith('service_tier.');
+  });
+  return hasServiceTierOverride ? ['login', ...extraArgs] : ['login', '-c', 'service_tier=flex', ...extraArgs];
+}
+
 export function runCodexLogin(extraArgs = []) {
   const bin = codexBinary();
-  const result = spawnSync(bin, ['login', ...extraArgs], {
+  const result = spawnSync(bin, loginArgs(extraArgs), {
     stdio: 'inherit',
     shell: process.platform === 'win32',
   });
@@ -32,4 +40,77 @@ export function isCodexRunning() {
   } catch {
     return null;
   }
+}
+
+function pidLinesForExactName(name) {
+  const out = spawnSync('pgrep', ['-x', name], { encoding: 'utf8' });
+  if (out.error || out.status !== 0 || typeof out.stdout !== 'string') return [];
+  return out.stdout
+    .split(/\s+/)
+    .map((pid) => pid.trim())
+    .filter(Boolean);
+}
+
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function pidAlive(pid) {
+  try {
+    process.kill(Number(pid), 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function waitForExit(pids, timeoutMs = 2000) {
+  const deadline = Date.now() + timeoutMs;
+  let alive = pids.filter(pidAlive);
+  while (alive.length > 0 && Date.now() < deadline) {
+    sleepSync(50);
+    alive = pids.filter(pidAlive);
+  }
+  return alive;
+}
+
+function killUnixProcessName(name, signal = 'TERM') {
+  const pids = pidLinesForExactName(name);
+  if (pids.length === 0) return { name, killed: 0 };
+  const result = spawnSync('kill', [`-${signal}`, ...pids], { encoding: 'utf8' });
+  let alive = waitForExit(pids);
+  let forced = 0;
+  if (alive.length > 0 && signal !== 'KILL') {
+    spawnSync('kill', ['-KILL', ...alive], { encoding: 'utf8' });
+    forced = alive.length;
+    alive = waitForExit(alive, 1000);
+  }
+  return {
+    name,
+    killed: pids.length,
+    forced,
+    stillRunning: alive.length,
+    status: result.status,
+    error: result.error ? result.error.message : null,
+  };
+}
+
+function killWindowsProcessName(imageName) {
+  const result = spawnSync('taskkill', ['/IM', imageName, '/T', '/F'], { encoding: 'utf8' });
+  if (result.error) return { name: imageName, killed: null, error: result.error.message };
+  const output = `${result.stdout || ''}\n${result.stderr || ''}`;
+  const killed = (output.match(/SUCCESS:/gi) || []).length;
+  return { name: imageName, killed, status: result.status };
+}
+
+export function terminateCodexProcesses() {
+  if (process.platform === 'win32') {
+    return [killWindowsProcessName('codex.exe')];
+  }
+
+  const results = [killUnixProcessName('codex')];
+  if (process.platform === 'darwin') {
+    results.push(killUnixProcessName('Codex'));
+  }
+  return results;
 }
