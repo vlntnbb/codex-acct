@@ -24,14 +24,28 @@ $ codex-acct limits
 
 Requires **Node.js >= 20.19**. The CLI uses Node's built-in runtime; the macOS menu bar app uses Electron from `optionalDependencies`.
 
-From this fork:
+Install globally from npm:
+
+```bash
+npm install -g @vlntnbb/codex-acct
+codex-acct ls
+# short alias:
+cxa ls
+```
+
+Or run directly:
+
+```bash
+npx @vlntnbb/codex-acct ls
+```
+
+From this fork for local development:
 
 ```bash
 git clone https://github.com/vlntnbb/codex-acct.git
 cd codex-acct
 npm install
 npm link            # exposes `codex-acct` / `cxa`
-codex-acct ls
 ```
 
 Launch the menu bar app from the checkout:

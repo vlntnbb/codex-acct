@@ -1,10 +1,10 @@
 {
-  "name": "@npmsh-corp/codex-acct",
+  "name": "@vlntnbb/codex-acct",
   "version": "0.1.0",
   "publishConfig": {
     "access": "public"
   },
-  "description": "Switch between multiple OpenAI Codex (ChatGPT) accounts by swapping ~/.codex/auth.json — like nvm, but for Codex logins.",
+  "description": "Switch between multiple OpenAI Codex accounts from the terminal or a macOS menu bar app.",
   "type": "module",
   "bin": {
     "codex-acct": "bin/codex-acct.js",
@@ -37,13 +37,13 @@
     "cli"
   ],
   "license": "MIT",
-  "author": "NikMishon",
+  "author": "vlntnbb",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/NikMishon/codex-acct.git"
+    "url": "git+https://github.com/vlntnbb/codex-acct.git"
   },
   "bugs": {
-    "url": "https://github.com/NikMishon/codex-acct/issues"
+    "url": "https://github.com/vlntnbb/codex-acct/issues"
   },
-  "homepage": "https://github.com/NikMishon/codex-acct#readme"
+  "homepage": "https://github.com/vlntnbb/codex-acct#readme"
 }
