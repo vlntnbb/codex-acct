@@ -9,7 +9,7 @@ import { UserError } from './errors.js';
 import { fileExists, readJsonFile } from './fsx.js';
 import { identityFromAuth } from './jwt.js';
 import { loadIndex, saveIndex } from './store.js';
-import { isCodexRunning, runCodexLogin } from './codex.js';
+import { isCodexDesktopRunning, isCodexRunning, runCodexLogin } from './codex.js';
 import { paint, printTable, humanizeExp } from './ui.js';
 import { pickFromList } from './pick.js';
 import { fetchAllAccountLimitStatuses } from './limits.js';
@@ -39,6 +39,8 @@ const OPTIONS = {
   import: { type: 'string' },
   refresh: { type: 'boolean' },
   'kill-codex': { type: 'boolean' },
+  'kill-codex-app': { type: 'boolean' },
+  'kill-codex-desktop': { type: 'boolean' },
   'keep-current': { type: 'boolean' },
   fix: { type: 'boolean' },
 };
@@ -49,7 +51,9 @@ function printHelp() {
 Usage
   codex-acct                          open the interactive account picker
   codex-acct use <alias|email|#>      switch the active account
-  codex-acct use --kill-codex <alias> kill Codex, then switch the active account
+  codex-acct use --kill-codex <alias> kill Codex CLI, then switch the active account
+  codex-acct use --kill-codex-app <alias>
+                                      also kill the macOS Codex desktop app before switching
   codex-acct ls                       list saved accounts
   codex-acct limits                   show Codex 5h/weekly limit status
   codex-acct who                      show the active account
@@ -70,7 +74,9 @@ Usage
 Options
   --json          machine-readable output (ls, who)
   --refresh       refresh OAuth tokens before reading limits
-  --kill-codex    terminate Codex before switching
+  --kill-codex    terminate Codex CLI before switching
+  --kill-codex-app
+                  also terminate the macOS Codex desktop app before switching
   --keep-current  after add, restore the account that was active before login
   --fix           repair known Codex config issues (doctor)
   --force, -f      override safety refusals (remove the active account)
@@ -130,8 +136,11 @@ function announcePreserved(preserved) {
 
 function warnRestart() {
   const running = isCodexRunning();
+  const desktopRunning = isCodexDesktopRunning();
   if (running === true) {
     console.log(paint('yellow', 'Codex appears to be running — restart it for the switch to take effect.'));
+  } else if (desktopRunning === true) {
+    console.log(paint('yellow', 'Codex Desktop is still running — restart it to pick up the switched account.'));
   } else {
     console.log(paint('gray', 'Restart Codex (or the IDE extension) for the switch to take effect.'));
   }
@@ -191,7 +200,11 @@ async function cmdUse(args, values) {
   if (!target) return cmdPick();
   const alias = resolveTarget(target);
   repairCodexConfigIfNeeded();
-  const { identity, preserved, terminated } = switchTo(alias, { killCodex: Boolean(values['kill-codex']) });
+  const killCodexDesktop = Boolean(values['kill-codex-app'] || values['kill-codex-desktop']);
+  const { identity, preserved, terminated } = switchTo(alias, {
+    killCodex: Boolean(values['kill-codex'] || killCodexDesktop),
+    killCodexDesktop,
+  });
   announceTerminated(terminated);
   announcePreserved(preserved);
   console.log(`${paint('green', 'switched to')} ${paint('bold', alias)} (${describe(identity)})`);

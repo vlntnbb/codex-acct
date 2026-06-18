@@ -118,13 +118,13 @@ export function preserveActiveAccount() {
   return { alias, created: true, identity: registered };
 }
 
-export function switchTo(alias, { killCodex = false } = {}) {
+export function switchTo(alias, { killCodex = false, killCodexDesktop = false } = {}) {
   const index = loadIndex();
   if (!index.accounts[alias]) throw new UserError(`unknown account '${alias}'`);
   if (!snapshotExists(alias)) {
     throw new UserError(`snapshot for '${alias}' is missing; re-add it with \`codex-acct add\``);
   }
-  const terminated = killCodex ? terminateCodexProcesses() : null;
+  const terminated = killCodex ? terminateCodexProcesses({ includeDesktop: killCodexDesktop }) : null;
   const preserved = preserveActiveAccount();
   copyFileAtomic(snapshotFilePath(alias), authFilePath(), { mode: 0o600 });
   const identity = identityFromAuth(readSnapshot(alias));

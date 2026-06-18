@@ -60,7 +60,8 @@ npm run menubar
 | --- | --- |
 | `codex-acct` | Open the interactive picker (↑/↓, enter, esc). |
 | `codex-acct use <alias\|email\|#>` | Switch the active account. |
-| `codex-acct use --kill-codex <alias\|email\|#>` | Terminate Codex, then switch the active account. |
+| `codex-acct use --kill-codex <alias\|email\|#>` | Terminate Codex CLI processes, then switch the active account. |
+| `codex-acct use --kill-codex-app <alias\|email\|#>` | Also terminate the macOS Codex desktop app before switching. |
 | `codex-acct ls` | List saved accounts (`--json` for scripts). |
 | `codex-acct limits` | Show 5h/weekly Codex usage windows for saved ChatGPT accounts (`--json` for scripts). |
 | `codex-acct who` | Show the active account (`--json`). |
@@ -97,7 +98,7 @@ The tray icon has no text label. Its color reflects the active account's weekly 
 
 Adding an account from the menu bar app opens a Terminal login flow, saves the new login, then restores the account that was active before the add flow. It does **not** silently switch the menu bar app to the newly added account.
 
-Switching from the menu bar app terminates running `codex`/`Codex` processes before swapping `auth.json`, then refreshes the displayed limits. Informational rows in the menu stay readable instead of using macOS's low-contrast disabled text.
+Switching from the menu bar app terminates running `codex` CLI processes before swapping `auth.json`, then refreshes the displayed limits. It does not terminate the macOS `Codex` desktop app by default, because forcibly killing the desktop app can disrupt existing thread runtimes. If Codex Desktop is already running, restart it manually after switching when you need the desktop app itself to pick up the new account. Informational rows in the menu stay readable instead of using macOS's low-contrast disabled text.
 
 ### First run
 
@@ -124,7 +125,7 @@ If `alias` is omitted it is derived from the account email.
 
 Codex (CLI, IDE extension and desktop app) reads `auth.json` at startup and may rewrite it on its next token refresh. **Switch while Codex is not running, then start it** — otherwise a running instance can clobber the swap.
 
-The menu bar app handles this by terminating running `codex`/`Codex` processes before switching. From the CLI, use `codex-acct use --kill-codex <alias>` for the same behavior.
+The menu bar app handles the CLI case by terminating running `codex` processes before switching. From the CLI, use `codex-acct use --kill-codex <alias>` for the same behavior. The macOS desktop app is intentionally left running unless you explicitly use `codex-acct use --kill-codex-app <alias>`.
 
 ### `ID-TOKEN` column
 

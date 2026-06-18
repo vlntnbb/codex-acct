@@ -42,6 +42,17 @@ export function isCodexRunning() {
   }
 }
 
+export function isCodexDesktopRunning() {
+  if (process.platform !== 'darwin') return false;
+  try {
+    const out = spawnSync('pgrep', ['-x', 'Codex'], { encoding: 'utf8' });
+    if (out.error) return null;
+    return out.status === 0 && Boolean(out.stdout && out.stdout.trim());
+  } catch {
+    return null;
+  }
+}
+
 function pidLinesForExactName(name) {
   const out = spawnSync('pgrep', ['-x', name], { encoding: 'utf8' });
   if (out.error || out.status !== 0 || typeof out.stdout !== 'string') return [];
@@ -103,14 +114,22 @@ function killWindowsProcessName(imageName) {
   return { name: imageName, killed, status: result.status };
 }
 
-export function terminateCodexProcesses() {
-  if (process.platform === 'win32') {
-    return [killWindowsProcessName('codex.exe')];
+export function codexProcessNamesToTerminate({ platform = process.platform, includeDesktop = false } = {}) {
+  if (platform === 'win32') {
+    return ['codex.exe'];
   }
 
-  const results = [killUnixProcessName('codex')];
-  if (process.platform === 'darwin') {
-    results.push(killUnixProcessName('Codex'));
+  const names = ['codex'];
+  if (platform === 'darwin' && includeDesktop) {
+    names.push('Codex');
   }
-  return results;
+  return names;
+}
+
+export function terminateCodexProcesses({ includeDesktop = false } = {}) {
+  const names = codexProcessNamesToTerminate({ includeDesktop });
+  if (process.platform === 'win32') {
+    return names.map(killWindowsProcessName);
+  }
+  return names.map((name) => killUnixProcessName(name));
 }

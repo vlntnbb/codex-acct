@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import zlib from 'node:zlib';
 
 import { preserveActiveAccount, switchTo } from './accounts.js';
+import { isCodexDesktopRunning } from './codex.js';
 import { accountsDir, indexFilePath } from './config.js';
 import { repairCodexConfig } from './codexConfig.js';
 import { fetchAllAccountLimitStatuses } from './limits.js';
@@ -446,9 +447,10 @@ async function switchAccount(alias) {
     repairCodexConfig();
     const result = switchTo(alias, { killCodex: true });
     const killed = (result.terminated || []).reduce((sum, item) => sum + (Number(item.killed) || 0), 0);
+    const desktopNote = isCodexDesktopRunning() ? '; restart Codex Desktop to pick it up' : '';
     new Notification({
       title: 'codex-acct',
-      body: `Switched to ${alias}${killed ? ` after terminating ${killed} Codex process(es)` : ''}`,
+      body: `Switched to ${alias}${killed ? ` after terminating ${killed} Codex CLI process(es)` : ''}${desktopNote}`,
     }).show();
     await refreshStatuses();
   } catch (err) {
