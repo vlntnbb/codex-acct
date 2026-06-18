@@ -13,6 +13,10 @@ export function authFilePath() {
   return path.join(codexHome(), 'auth.json');
 }
 
+export function configFilePath() {
+  return path.join(codexHome(), 'config.toml');
+}
+
 export function accountsDir() {
   return path.join(codexHome(), 'accounts');
 }

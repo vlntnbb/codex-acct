@@ -6,6 +6,7 @@ import zlib from 'node:zlib';
 
 import { preserveActiveAccount, switchTo } from './accounts.js';
 import { accountsDir, indexFilePath } from './config.js';
+import { repairCodexConfig } from './codexConfig.js';
 import { fetchAllAccountLimitStatuses } from './limits.js';
 import { humanizeExp } from './ui.js';
 
@@ -442,6 +443,7 @@ async function switchAccount(alias) {
   switchingAlias = alias;
   rebuildMenu();
   try {
+    repairCodexConfig();
     const result = switchTo(alias, { killCodex: true });
     const killed = (result.terminated || []).reduce((sum, item) => sum + (Number(item.killed) || 0), 0);
     new Notification({
@@ -460,6 +462,7 @@ async function switchAccount(alias) {
 app.setName('codex-acct');
 app.whenReady().then(async () => {
   app.dock?.hide();
+  repairCodexConfig();
   tray = new Tray(trayIcon());
   tray.setToolTip('codex-acct');
   watchAccountsIndex();

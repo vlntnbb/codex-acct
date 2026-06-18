@@ -2,7 +2,7 @@
 
 Switch between multiple OpenAI **Codex** (ChatGPT) accounts from the terminal or a macOS menu bar app — like `nvm` for Node versions, but for Codex logins.
 
-Codex stores a single login in `~/.codex/auth.json`. When one account runs out of usage, `codex-acct` swaps in another saved account in one command, and lets you switch back later. It touches **only** `auth.json` — your sessions, memories, skills, config and history stay shared.
+Codex stores a single login in `~/.codex/auth.json`. When one account runs out of usage, `codex-acct` swaps in another saved account in one command, and lets you switch back later. Account switching touches **only** `auth.json` — your sessions, memories, skills and history stay shared.
 
 ```
 $ codex-acct ls
@@ -64,6 +64,8 @@ npm run menubar
 | `codex-acct ls` | List saved accounts (`--json` for scripts). |
 | `codex-acct limits` | Show 5h/weekly Codex usage windows for saved ChatGPT accounts (`--json` for scripts). |
 | `codex-acct who` | Show the active account (`--json`). |
+| `codex-acct doctor` | Check Codex config for known issues that can break startup/access mode. |
+| `codex-acct doctor --fix` | Repair known Codex config issues. |
 | `codex-acct add [alias]` | Run `codex login` for a new account, then save it. |
 | `codex-acct add --keep-current [alias]` | Save a new account, then restore the previously active account. |
 | `codex-acct add --from-current [alias]` | Save the account you are already logged in as. |
@@ -114,6 +116,7 @@ If `alias` is omitted it is derived from the account email.
 - Each account is a snapshot of `auth.json` stored in `~/.codex/accounts/<alias>.auth.json`, indexed by `index.json`.
 - `use` first **re-snapshots the current account** (Codex rewrites `auth.json` with fresh tokens as you work, so this captures the latest), then atomically replaces `auth.json` with the chosen snapshot. If the current login is not saved yet, it is preserved automatically under an email-derived alias so it is never lost.
 - `limits` and the menu bar app read Codex usage from ChatGPT's backend using the saved OAuth tokens. They show the 5-hour and weekly windows, including reset minutes when the backend provides reset timestamps.
+- Before switching accounts or launching `codex login`, `codex-acct` repairs the known-invalid Codex config value `service_tier = "default"` by changing it to `service_tier = "flex"`. Current Codex builds reject `default`, and a config load failure can make Codex fall back to safer access/approval behavior. `codex-acct` does not force approval or sandbox settings.
 - Accounts are matched by the stable `chatgpt_account_id` from the id-token JWT, not by email or alias — so two snapshots of the same account are recognized as the same account.
 - Writes are atomic (temp file → `fsync` → rename, with retries for transient Windows file locks). Snapshots are written `0600` on Unix.
 

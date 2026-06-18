@@ -13,6 +13,7 @@ import { isCodexRunning, runCodexLogin } from './codex.js';
 import { paint, printTable, humanizeExp } from './ui.js';
 import { pickFromList } from './pick.js';
 import { fetchAllAccountLimitStatuses } from './limits.js';
+import { inspectCodexConfig, repairCodexConfig } from './codexConfig.js';
 import {
   activeIdentity,
   aliasFromEmail,
@@ -39,6 +40,7 @@ const OPTIONS = {
   refresh: { type: 'boolean' },
   'kill-codex': { type: 'boolean' },
   'keep-current': { type: 'boolean' },
+  fix: { type: 'boolean' },
 };
 
 function printHelp() {
@@ -51,6 +53,8 @@ Usage
   codex-acct ls                       list saved accounts
   codex-acct limits                   show Codex 5h/weekly limit status
   codex-acct who                      show the active account
+  codex-acct doctor                   check Codex config for known issues
+  codex-acct doctor --fix             repair known Codex config issues
   codex-acct menubar                  launch the macOS menu bar app
   codex-acct add [alias]              log in to a new account and save it
   codex-acct add --keep-current [alias]
@@ -68,14 +72,26 @@ Options
   --refresh       refresh OAuth tokens before reading limits
   --kill-codex    terminate Codex before switching
   --keep-current  after add, restore the account that was active before login
+  --fix           repair known Codex config issues (doctor)
   --force, -f      override safety refusals (remove the active account)
   --help, -h       show this help
   --version        print version
 
 Notes
-  Only auth.json is swapped — sessions, memories, skills and config stay shared.
+  Account switching swaps only auth.json — sessions, memories and skills stay shared.
+  Known-invalid Codex config values may be repaired; approval/sandbox settings are not forced.
   Codex reads auth.json at startup; restart Codex (or the IDE extension) after switching.
   Set CODEX_HOME for a non-default Codex home; set CODEX_BIN if \`codex\` is not on PATH.`);
+}
+
+function repairCodexConfigIfNeeded() {
+  const result = repairCodexConfig();
+  if (result.changed) {
+    process.stderr.write(
+      `${paint('gray', `repaired ${result.file}: service_tier "default" -> "flex"`)}\n`,
+    );
+  }
+  return result;
 }
 
 function resolveTarget(target) {
@@ -162,6 +178,7 @@ async function cmdPick() {
     console.log(paint('gray', 'cancelled'));
     return 0;
   }
+  repairCodexConfigIfNeeded();
   const { identity, preserved } = switchTo(chosen.alias);
   announcePreserved(preserved);
   console.log(`${paint('green', 'switched to')} ${paint('bold', chosen.alias)} (${describe(identity)})`);
@@ -173,6 +190,7 @@ async function cmdUse(args, values) {
   const target = args[0];
   if (!target) return cmdPick();
   const alias = resolveTarget(target);
+  repairCodexConfigIfNeeded();
   const { identity, preserved, terminated } = switchTo(alias, { killCodex: Boolean(values['kill-codex']) });
   announceTerminated(terminated);
   announcePreserved(preserved);
@@ -256,6 +274,7 @@ async function cmdMenubar() {
   if (process.platform !== 'darwin') {
     throw new UserError('the menu bar app is only supported on macOS');
   }
+  repairCodexConfigIfNeeded();
   const require = createRequire(import.meta.url);
   let electronBin;
   try {
@@ -297,6 +316,7 @@ async function cmdAdd(args, values) {
     return 0;
   }
 
+  repairCodexConfigIfNeeded();
   const preserved = preserveActiveAccount();
   if (preserved?.created) {
     console.log(paint('gray', `saved current account as '${preserved.alias}' before login`));
@@ -327,6 +347,38 @@ async function cmdAdd(args, values) {
     );
   }
   return 0;
+}
+
+function cmdDoctor(values) {
+  const result = values.fix ? repairCodexConfig() : inspectCodexConfig();
+  if (values.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return result.issues.length === 0 || result.changed ? 0 : 1;
+  }
+
+  if (!result.exists) {
+    console.log(`Codex config not found: ${result.file}`);
+    return 0;
+  }
+  if (result.issues.length === 0) {
+    console.log(`Codex config OK: ${result.file}`);
+    return 0;
+  }
+
+  for (const item of result.issues) {
+    console.log(`${paint('yellow', item.code)}  ${item.message}`);
+  }
+  if (values.fix) {
+    console.log(
+      result.changed
+        ? `Repaired Codex config: ${result.file}`
+        : `No repair applied: ${result.file}`,
+    );
+    return result.changed ? 0 : 1;
+  }
+
+  console.log('Run `codex-acct doctor --fix` to repair known issues.');
+  return 1;
 }
 
 function cmdRemove(args, values) {
@@ -396,6 +448,9 @@ export async function main(argv) {
       case 'who':
       case 'current':
         return cmdWho(values);
+      case 'doctor':
+      case 'check':
+        return cmdDoctor(values);
       case 'menubar':
       case 'menu-bar':
         return await cmdMenubar();
