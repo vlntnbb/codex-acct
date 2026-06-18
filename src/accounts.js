@@ -2,7 +2,7 @@ import { authFilePath, snapshotFilePath } from './config.js';
 import { copyFileAtomic, fileExists, readJsonFile } from './fsx.js';
 import { identityFromAuth } from './jwt.js';
 import { UserError } from './errors.js';
-import { terminateCodexProcesses } from './codex.js';
+import { openCodexDesktop, quitCodexDesktopGracefully, terminateCodexProcesses } from './codex.js';
 import {
   deleteSnapshot,
   loadIndex,
@@ -118,17 +118,27 @@ export function preserveActiveAccount() {
   return { alias, created: true, identity: registered };
 }
 
-export function switchTo(alias, { killCodex = false, killCodexDesktop = false } = {}) {
+export function switchTo(
+  alias,
+  { killCodex = false, killCodexDesktop = false, restartCodexDesktop = false } = {},
+) {
   const index = loadIndex();
   if (!index.accounts[alias]) throw new UserError(`unknown account '${alias}'`);
   if (!snapshotExists(alias)) {
     throw new UserError(`snapshot for '${alias}' is missing; re-add it with \`codex-acct add\``);
   }
-  const terminated = killCodex ? terminateCodexProcesses({ includeDesktop: killCodexDesktop }) : null;
+  const terminated = killCodex
+    ? terminateCodexProcesses({ includeDesktop: killCodexDesktop && !restartCodexDesktop })
+    : null;
+  const desktopQuit = restartCodexDesktop ? quitCodexDesktopGracefully() : null;
+  if (desktopQuit?.wasRunning && !desktopQuit.exited) {
+    throw new UserError('Codex Desktop did not quit cleanly; account switch was cancelled');
+  }
   const preserved = preserveActiveAccount();
   copyFileAtomic(snapshotFilePath(alias), authFilePath(), { mode: 0o600 });
   const identity = identityFromAuth(readSnapshot(alias));
-  return { identity, preserved, terminated };
+  const desktopOpen = desktopQuit?.wasRunning ? openCodexDesktop() : null;
+  return { identity, preserved, terminated, desktopQuit, desktopOpen };
 }
 
 export function removeAccount(alias, { force = false } = {}) {

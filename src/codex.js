@@ -1,5 +1,8 @@
 import { spawnSync } from 'node:child_process';
 
+const CODEX_DESKTOP_APP_NAME = 'Codex';
+const CODEX_DESKTOP_PROCESS_NAME = 'Codex';
+
 export function codexBinary() {
   return process.env.CODEX_BIN || 'codex';
 }
@@ -45,7 +48,7 @@ export function isCodexRunning() {
 export function isCodexDesktopRunning() {
   if (process.platform !== 'darwin') return false;
   try {
-    const out = spawnSync('pgrep', ['-x', 'Codex'], { encoding: 'utf8' });
+    const out = spawnSync('pgrep', ['-x', CODEX_DESKTOP_PROCESS_NAME], { encoding: 'utf8' });
     if (out.error) return null;
     return out.status === 0 && Boolean(out.stdout && out.stdout.trim());
   } catch {
@@ -85,6 +88,59 @@ function waitForExit(pids, timeoutMs = 2000) {
   return alive;
 }
 
+export function quitCodexDesktopGracefully({ timeoutMs = 15000 } = {}) {
+  if (process.platform !== 'darwin') {
+    return { supported: false, wasRunning: false, quitRequested: false, exited: true };
+  }
+
+  const pids = pidLinesForExactName(CODEX_DESKTOP_PROCESS_NAME);
+  if (pids.length === 0) {
+    return { supported: true, wasRunning: false, quitRequested: false, exited: true };
+  }
+
+  const result = spawnSync(
+    'osascript',
+    ['-e', `tell application ${JSON.stringify(CODEX_DESKTOP_APP_NAME)} to quit`],
+    { encoding: 'utf8' },
+  );
+  if (result.error) {
+    return {
+      supported: true,
+      wasRunning: true,
+      quitRequested: false,
+      exited: false,
+      error: result.error.message,
+    };
+  }
+
+  const alive = waitForExit(pids, timeoutMs);
+  return {
+    supported: true,
+    wasRunning: true,
+    quitRequested: true,
+    exited: alive.length === 0,
+    stillRunning: alive.length,
+    status: result.status,
+    stderr: result.stderr || '',
+  };
+}
+
+export function openCodexDesktop() {
+  if (process.platform !== 'darwin') {
+    return { supported: false, opened: false };
+  }
+  const result = spawnSync('open', ['-a', CODEX_DESKTOP_APP_NAME], { encoding: 'utf8' });
+  if (result.error) {
+    return { supported: true, opened: false, error: result.error.message };
+  }
+  return {
+    supported: true,
+    opened: result.status === 0,
+    status: result.status,
+    stderr: result.stderr || '',
+  };
+}
+
 function killUnixProcessName(name, signal = 'TERM') {
   const pids = pidLinesForExactName(name);
   if (pids.length === 0) return { name, killed: 0 };
@@ -121,7 +177,7 @@ export function codexProcessNamesToTerminate({ platform = process.platform, incl
 
   const names = ['codex'];
   if (platform === 'darwin' && includeDesktop) {
-    names.push('Codex');
+    names.push(CODEX_DESKTOP_PROCESS_NAME);
   }
   return names;
 }

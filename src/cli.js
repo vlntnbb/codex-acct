@@ -41,6 +41,8 @@ const OPTIONS = {
   'kill-codex': { type: 'boolean' },
   'kill-codex-app': { type: 'boolean' },
   'kill-codex-desktop': { type: 'boolean' },
+  'restart-codex-app': { type: 'boolean' },
+  'restart-codex-desktop': { type: 'boolean' },
   'keep-current': { type: 'boolean' },
   fix: { type: 'boolean' },
 };
@@ -52,8 +54,10 @@ Usage
   codex-acct                          open the interactive account picker
   codex-acct use <alias|email|#>      switch the active account
   codex-acct use --kill-codex <alias> kill Codex CLI, then switch the active account
+  codex-acct use --restart-codex-app <alias>
+                                      gracefully restart the macOS Codex desktop app around switching
   codex-acct use --kill-codex-app <alias>
-                                      also kill the macOS Codex desktop app before switching
+                                      force-kill the macOS Codex desktop app before switching
   codex-acct ls                       list saved accounts
   codex-acct limits                   show Codex 5h/weekly limit status
   codex-acct who                      show the active account
@@ -75,8 +79,10 @@ Options
   --json          machine-readable output (ls, who)
   --refresh       refresh OAuth tokens before reading limits
   --kill-codex    terminate Codex CLI before switching
+  --restart-codex-app
+                  gracefully quit and reopen the macOS Codex desktop app around switching
   --kill-codex-app
-                  also terminate the macOS Codex desktop app before switching
+                  force-kill the macOS Codex desktop app before switching
   --keep-current  after add, restore the account that was active before login
   --fix           repair known Codex config issues (doctor)
   --force, -f      override safety refusals (remove the active account)
@@ -134,7 +140,11 @@ function announcePreserved(preserved) {
   }
 }
 
-function warnRestart() {
+function warnRestart({ desktopRestarted = false } = {}) {
+  if (desktopRestarted) {
+    console.log(paint('gray', 'Codex Desktop was reopened after switching.'));
+    return;
+  }
   const running = isCodexRunning();
   const desktopRunning = isCodexDesktopRunning();
   if (running === true) {
@@ -150,6 +160,15 @@ function announceTerminated(terminated) {
   const killed = (terminated || []).reduce((sum, item) => sum + (Number(item.killed) || 0), 0);
   if (killed > 0) {
     console.log(paint('gray', `terminated ${killed} Codex process${killed === 1 ? '' : 'es'} before switching`));
+  }
+}
+
+function announceDesktopRestart(result) {
+  if (!result?.desktopQuit?.wasRunning) return;
+  if (result.desktopOpen?.opened) {
+    console.log(paint('gray', 'gracefully restarted Codex Desktop after switching'));
+  } else {
+    console.log(paint('yellow', 'Codex Desktop quit cleanly, but could not be reopened automatically.'));
   }
 }
 
@@ -201,14 +220,18 @@ async function cmdUse(args, values) {
   const alias = resolveTarget(target);
   repairCodexConfigIfNeeded();
   const killCodexDesktop = Boolean(values['kill-codex-app'] || values['kill-codex-desktop']);
-  const { identity, preserved, terminated } = switchTo(alias, {
-    killCodex: Boolean(values['kill-codex'] || killCodexDesktop),
+  const restartCodexDesktop = Boolean(values['restart-codex-app'] || values['restart-codex-desktop']);
+  const result = switchTo(alias, {
+    killCodex: Boolean(values['kill-codex'] || killCodexDesktop || restartCodexDesktop),
     killCodexDesktop,
+    restartCodexDesktop,
   });
+  const { identity, preserved, terminated } = result;
   announceTerminated(terminated);
+  announceDesktopRestart(result);
   announcePreserved(preserved);
   console.log(`${paint('green', 'switched to')} ${paint('bold', alias)} (${describe(identity)})`);
-  warnRestart();
+  warnRestart({ desktopRestarted: Boolean(result.desktopOpen?.opened) });
   return 0;
 }
 

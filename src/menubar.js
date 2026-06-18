@@ -445,9 +445,13 @@ async function switchAccount(alias) {
   rebuildMenu();
   try {
     repairCodexConfig();
-    const result = switchTo(alias, { killCodex: true });
+    const result = switchTo(alias, { killCodex: true, restartCodexDesktop: true });
     const killed = (result.terminated || []).reduce((sum, item) => sum + (Number(item.killed) || 0), 0);
-    const desktopNote = isCodexDesktopRunning() ? '; restart Codex Desktop to pick it up' : '';
+    const desktopNote = result.desktopOpen?.opened
+      ? '; Codex Desktop restarted'
+      : isCodexDesktopRunning()
+        ? '; restart Codex Desktop to pick it up'
+        : '';
     new Notification({
       title: 'codex-acct',
       body: `Switched to ${alias}${killed ? ` after terminating ${killed} Codex CLI process(es)` : ''}${desktopNote}`,
