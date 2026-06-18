@@ -99,7 +99,7 @@ The tray icon has no text label. Its color reflects the active account's weekly 
 
 Adding an account from the menu bar app opens a Terminal login flow, saves the new login, then restores the account that was active before the add flow. It does **not** silently switch the menu bar app to the newly added account.
 
-Switching from the menu bar app terminates running `codex` CLI processes, gracefully asks the macOS `Codex` desktop app to quit when it is running, swaps `auth.json`, then reopens the desktop app. If the desktop app does not quit cleanly, the account switch is cancelled instead of force-killing it. Informational rows in the menu stay readable instead of using macOS's low-contrast disabled text.
+Switching from the menu bar app gracefully asks the macOS `Codex` desktop app to quit when it is running, then terminates leftover `codex` CLI/runtime processes, swaps `auth.json`, and reopens the desktop app. If the desktop app does not quit cleanly, the account switch is cancelled instead of force-killing it. Informational rows in the menu stay readable instead of using macOS's low-contrast disabled text.
 
 ### First run
 
@@ -126,7 +126,7 @@ If `alias` is omitted it is derived from the account email.
 
 Codex (CLI, IDE extension and desktop app) reads `auth.json` at startup and may rewrite it on its next token refresh. **Switch while Codex is not running, then start it** — otherwise a running instance can clobber the swap.
 
-The menu bar app handles this by terminating running `codex` CLI processes and gracefully restarting the macOS desktop app around the switch. From the CLI, use `codex-acct use --restart-codex-app <alias>` for the same behavior. The force-kill fallback remains available as `codex-acct use --kill-codex-app <alias>`.
+The menu bar app handles this by gracefully restarting the macOS desktop app around the switch, then terminating leftover `codex` CLI/runtime processes before swapping accounts. From the CLI, use `codex-acct use --restart-codex-app <alias>` for the same behavior. The force-kill fallback remains available as `codex-acct use --kill-codex-app <alias>`.
 
 ### `ID-TOKEN` column
 
@@ -148,6 +148,28 @@ The `ID-TOKEN` column shows the id-token expiry, which is short-lived (hours). A
 - Tokens are never printed or logged.
 - Snapshots live under your user-owned Codex home (`0600` on Unix); do not commit them or share them.
 - Account switching is local. Limit checks call ChatGPT's backend and the OpenAI OAuth refresh endpoint when tokens need refreshing; no third-party service receives your tokens.
+
+## Publishing
+
+This fork publishes to npm through GitHub Actions trusted publishing, so release jobs do not need long-lived npm tokens or one-time 2FA codes.
+
+Configure the package once on npmjs.com:
+
+- Package: `@vlntnbb/codex-acct`
+- Trusted publisher: GitHub Actions
+- Organization or user: `vlntnbb`
+- Repository: `codex-acct`
+- Workflow filename: `publish.yml`
+- Allowed action: `npm publish`
+
+Then publish a release by pushing a version tag that matches `package.json`:
+
+```bash
+git tag v0.1.3
+git push origin v0.1.3
+```
+
+The workflow runs `npm ci`, `npm test`, verifies the tag/version match, then runs `npm publish --access public`.
 
 ## License
 

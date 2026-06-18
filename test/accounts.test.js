@@ -9,6 +9,7 @@ import { readJsonFile } from '../src/fsx.js';
 import {
   aliasFromEmail,
   listAccounts,
+  prepareCodexForSwitch,
   registerAccount,
   removeAccount,
   renameAccount,
@@ -103,6 +104,51 @@ test('switching away from an unsaved account preserves it automatically', () => 
     const aliases = listAccounts().map((a) => a.alias).sort();
     assert.deepEqual(aliases, ['fresh', 'saved']);
   });
+});
+
+test('prepareCodexForSwitch gracefully quits Desktop before terminating codex processes', () => {
+  const events = [];
+  const result = prepareCodexForSwitch(
+    { killCodex: true, killCodexDesktop: true, restartCodexDesktop: true },
+    {
+      quitDesktop() {
+        events.push('quit-desktop');
+        return { wasRunning: true, exited: true };
+      },
+      terminateProcesses(options) {
+        events.push(`terminate:${options.includeDesktop}`);
+        return [{ name: 'codex', killed: 1 }];
+      },
+    },
+  );
+
+  assert.deepEqual(events, ['quit-desktop', 'terminate:false']);
+  assert.equal(result.desktopQuit.wasRunning, true);
+  assert.equal(result.terminated[0].killed, 1);
+});
+
+test('prepareCodexForSwitch cancels switching when Desktop does not quit cleanly', () => {
+  const events = [];
+
+  assert.throws(
+    () =>
+      prepareCodexForSwitch(
+        { killCodex: true, restartCodexDesktop: true },
+        {
+          quitDesktop() {
+            events.push('quit-desktop');
+            return { wasRunning: true, exited: false };
+          },
+          terminateProcesses() {
+            events.push('terminate');
+            return [];
+          },
+        },
+      ),
+    /did not quit cleanly/,
+  );
+
+  assert.deepEqual(events, ['quit-desktop']);
 });
 
 test('registerAccount flags duplicate account ids', () => {

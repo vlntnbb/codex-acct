@@ -127,18 +127,38 @@ export function switchTo(
   if (!snapshotExists(alias)) {
     throw new UserError(`snapshot for '${alias}' is missing; re-add it with \`codex-acct add\``);
   }
-  const terminated = killCodex
-    ? terminateCodexProcesses({ includeDesktop: killCodexDesktop && !restartCodexDesktop })
-    : null;
-  const desktopQuit = restartCodexDesktop ? quitCodexDesktopGracefully() : null;
-  if (desktopQuit?.wasRunning && !desktopQuit.exited) {
-    throw new UserError('Codex Desktop did not quit cleanly; account switch was cancelled');
-  }
+  const { terminated, desktopQuit } = prepareCodexForSwitch({
+    killCodex,
+    killCodexDesktop,
+    restartCodexDesktop,
+  });
   const preserved = preserveActiveAccount();
   copyFileAtomic(snapshotFilePath(alias), authFilePath(), { mode: 0o600 });
   const identity = identityFromAuth(readSnapshot(alias));
   const desktopOpen = desktopQuit?.wasRunning ? openCodexDesktop() : null;
   return { identity, preserved, terminated, desktopQuit, desktopOpen };
+}
+
+export function prepareCodexForSwitch(
+  { killCodex = false, killCodexDesktop = false, restartCodexDesktop = false } = {},
+  {
+    quitDesktop = quitCodexDesktopGracefully,
+    terminateProcesses = terminateCodexProcesses,
+  } = {},
+) {
+  let desktopQuit = null;
+  if (restartCodexDesktop) {
+    desktopQuit = quitDesktop();
+    if (desktopQuit?.wasRunning && !desktopQuit.exited) {
+      throw new UserError('Codex Desktop did not quit cleanly; account switch was cancelled');
+    }
+  }
+
+  const terminated = killCodex
+    ? terminateProcesses({ includeDesktop: killCodexDesktop && !restartCodexDesktop })
+    : null;
+
+  return { terminated, desktopQuit };
 }
 
 export function removeAccount(alias, { force = false } = {}) {
